@@ -9,6 +9,7 @@ xdp-api-guard-common = { path = "../xdp-api-guard-common" }
 aya-ebpf = { workspace = true }
 aya-log-ebpf = { workspace = true }
 
+network-types = "0.0.5"
 [build-dependencies]
 which = { workspace = true }
 

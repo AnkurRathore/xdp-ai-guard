@@ -383,6 +383,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "network-types"
+version = "0.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f07952b48f02537f3088f517a3cf87372a25372d51991328938531b83a31cb3a"
+
+[[package]]
 name = "num_enum"
 version = "0.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -868,6 +874,7 @@ version = "0.1.0"
 dependencies = [
  "aya-ebpf",
  "aya-log-ebpf",
+ "network-types",
  "which 6.0.3",
  "xdp-api-guard-common",
 ]

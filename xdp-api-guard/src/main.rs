@@ -1,5 +1,8 @@
+use std::net::Ipv4Addr;
+
 use anyhow::Context as _;
 use aya::programs::{Xdp, XdpFlags};
+use aya::maps::HashMap;
 use clap::Parser;
 #[rustfmt::skip]
 use log::{debug, warn};
@@ -58,6 +61,17 @@ async fn main() -> anyhow::Result<()> {
     program.load()?;
     program.attach(&iface, XdpFlags::default())
         .context("failed to attach the XDP program with default flags - try changing XdpFlags::default() to XdpFlags::SKB_MODE")?;
+
+
+    // Getting a handle to Kernel Map
+    let mut blocklist: HashMap<_, u32, u32> = HashMap::try_from(ebpf.map_mut("BLOCKLIST").unwrap())?;
+    //Block 8.8.8.8 ip for testing
+    let ip_to_block = Ipv4Addr::new(8,8,8,8);
+    let ip_u32: u32 = u32::from(ip_to_block);
+
+    println!("Blocking IP:{} ({:x})", ip_to_block, ip_u32);
+    //Insert to Map
+    blocklist.insert(ip_u32,1,0);
 
     let ctrl_c = signal::ctrl_c();
     println!("Waiting for Ctrl-C...");
