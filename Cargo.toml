@@ -10,6 +10,11 @@ default-members = ["xdp-api-guard", "xdp-api-guard-common"]
 [workspace.package]
 license = "MIT OR Apache-2.0"
 edition = "2024"
+authors = ["Ankur Rathore <rathore.ankur@gmail.com>"]
+description = "A high-performance XDP firewall and rate limiter using eBPF"
+repository = "https://github.com/AnkurRathore/xdp-ai-guard"
+keywords = ["ebpf", "xdp", "rust", "linux", "networking"]
+categories = ["network-programming", "command-line-utilities"]
 
 [workspace.dependencies]
 aya = { git = "https://github.com/aya-rs/aya", default-features = false }
