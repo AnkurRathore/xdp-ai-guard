@@ -7,6 +7,7 @@ use aya_ebpf::{
     maps::HashMap, 
     programs::XdpContext};
 use aya_log_ebpf::info;
+use aya_ebpf::helpers::bpf_ktime_get_ns;
 use core::mem;
 use network_types::{
     eth::{EthHdr,EtherType},
@@ -14,7 +15,18 @@ use network_types::{
 };
 
 #[map]
-static BLOCKLIST: HashMap::<u32, u32> = HashMap::<u32, u32>::with_max_entries(1024,0);
+static RATE_LIMIT_MAP: HashMap::<u32, PacketLog> = HashMap::<u32, PacketLog>::with_max_entries(1024,0);
+// Threshold:10 packets per sconds
+const LIMIT: u64 = 10;
+const WINDOW_NS: u64 = 1_000_000_000;
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct  PacketLog
+{
+    pub count: u64,
+    pub last_seen: u64,//Nanoseconds since boot
+}
 
 
 #[xdp]
@@ -62,13 +74,45 @@ fn try_xdp_api_guard(ctx: XdpContext) -> Result<u32, ()> {
 
      // Blocking Logic
      // Check if source ip exists in the BLOCKING MAP
-     if unsafe { BLOCKLIST.get(&ipv4_src)}.is_some(){
-        info!(&ctx, "BLOCKED packet from:{:x}", ipv4_src);
-        return Ok(xdp_action::XDP_DROP)
-     }
-     //Log IP, Logging integer for now
-     info!(&ctx, "Received IPv4 packet from: {:x}", ipv4_src);
+    //  if unsafe { BLOCKLIST.get(&ipv4_src)}.is_some(){
+    //     info!(&ctx, "BLOCKED packet from:{:x}", ipv4_src);
+    //     return Ok(xdp_action::XDP_DROP)
+    //  }
 
+    // Get the current time
+    let now = unsafe {(bpf_ktime_get_ns()) };
+    // check the map
+    match unsafe {RATE_LIMIT_MAP.get_ptr_mut(&ipv4_src)}{
+        Some(entry) => {
+            let log = unsafe { &mut *entry};
+
+            // check if the 1 second window has passed
+            if now - log.last_seen > WINDOW_NS{
+                // RESET the Window
+                log.count = 1;
+                log.last_seen = now;
+            }else {
+                // Same Window
+                log.count +=1;
+            }
+
+            // Apply the limit
+            if log.count > LIMIT {
+                info!(&ctx, "LIMIT_EXCEEDED: {:x} (Count: {})", ipv4_src, log.count);
+                return Ok(xdp_action::XDP_DROP);
+            }
+        }
+        None => {
+            // First time seeing this IP: Add to MAP
+            let new_entry = PacketLog{
+                count :1,
+                last_seen: now,
+
+            };
+            unsafe {RATE_LIMIT_MAP.insert(&ipv4_src, &new_entry, 0) }.map_err(|_| ())?;
+        }
+    }
+     
      Ok(xdp_action::XDP_PASS)
 }
 
