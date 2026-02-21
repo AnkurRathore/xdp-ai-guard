@@ -1,8 +1,8 @@
 use std::net::Ipv4Addr;
 
 use anyhow::Context as _;
-use aya::programs::{Xdp, XdpFlags};
 use aya::maps::HashMap;
+use aya::programs::{Xdp, XdpFlags};
 use clap::Parser;
 #[rustfmt::skip]
 use log::{debug, warn};
@@ -12,6 +12,10 @@ use tokio::signal;
 struct Opt {
     #[clap(short, long, default_value = "enp0s3")]
     iface: String,
+
+    /// IP address to block immediately at startup (Optional)
+    #[clap(long)]
+    block: Option<Ipv4Addr>,
 }
 
 #[tokio::main]
@@ -56,13 +60,30 @@ async fn main() -> anyhow::Result<()> {
             });
         }
     }
-    let Opt { iface } = opt;
+    {
+        // 1. Get reference to the map
+        let mut blocklist: HashMap<_, u32, u32> =
+            HashMap::try_from(ebpf.map_mut("BLOCKLIST").unwrap())?;
+
+        // 2. Add IP from CLI args (if provided)
+        if let Some(ip) = opt.block {
+            let ip_u32: u32 = u32::from(ip); // Converts 1.2.3.4 -> u32
+
+            println!("Adding {} to Blocklist...", ip);
+            blocklist.insert(ip_u32, 1, 0)?;
+        }
+        // 3. Adding a hardcoded test IP (Google DNS) just to be sure
+        // 8.8.8.8 is 0x08080808 (Palindrome, so endianness doesn't matter)
+        blocklist.insert(0x08080808, 1, 0)?;
+    }
+
     let program: &mut Xdp = ebpf.program_mut("xdp_api_guard").unwrap().try_into()?;
     program.load()?;
-    program.attach(&iface, XdpFlags::default())
-        .context("failed to attach the XDP program with default flags - try changing XdpFlags::default() to XdpFlags::SKB_MODE")?;
+    program
+        .attach(&opt.iface, XdpFlags::default())
+        .context("failed to attach the XDP program")?;
 
-
+    
     let ctrl_c = signal::ctrl_c();
     println!("Waiting for Ctrl-C...");
     ctrl_c.await?;
