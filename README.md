@@ -6,20 +6,20 @@
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Rust](https://img.shields.io/badge/rust-nightly-red)
 
-## ⚡ The Problem: GPU Cycles are Expensive
+## The Problem: GPU Cycles are Expensive
 Running Large Language Models (like Llama-3-70B) is computationally expensive.
 Standard firewalls (Nginx, Iptables) drop malicious packets **after** the OS has already allocated memory (`sk_buff`) and performed context switches.
 
 If an inference server receives a flood of spam/DDoS traffic, the CPU wastes cycles processing network interrupts instead of feeding data to the GPU.
 
-## 🚀 The Solution: XDP (eXpress Data Path)
+## The Solution: XDP (eXpress Data Path)
 **xdp-ai-guard** runs an eBPF program directly in the Network Interface Card (NIC) driver. It inspects and drops malicious packets **before** the Linux Kernel even sees them.
 
 *   **Zero Allocation:** Drops packets without allocating an `sk_buff`.
 *   **Line Rate:** Capable of filtering millions of packets per second.
 *   **Dual-Layer Defense:** Combines a static blocklist with dynamic volumetric rate limiting.
 
-## 📸 Demo & Evidence
+## Demo & Evidence
 
 ### 1. Manual Blocking (Static Blocklist)
 The user space agent populates a Kernel Map with known bad IPs (e.g., `1.1.1.1`). The XDP program drops them instantly.
@@ -37,7 +37,7 @@ When a flood is detected (e.g., `sudo ping -f`), the XDP program automatically e
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 This project uses the **Aya** framework to write eBPF logic in safe Rust.
 
@@ -52,7 +52,7 @@ This project uses the **Aya** framework to write eBPF logic in safe Rust.
     *   Provides a CLI to add IPs to the blocklist.
     *   Reads logs from the kernel via the `aya_log` ring buffer.
 
-## 🛠️ Prerequisites
+## Prerequisites
 
 You need a Linux environment with a modern kernel (5.10+ recommended).
 
@@ -66,7 +66,7 @@ You need a Linux environment with a modern kernel (5.10+ recommended).
     ```
 3.  **Dependencies:** `llvm`, `clang`, `libssl-dev`.
 
-## 🏃 Usage
+## Usage
 
 ### 1. Build
 ```bash
@@ -86,7 +86,7 @@ Blocks a specific IP immediately upon startup.
 RUST_LOG=info sudo -E cargo run --bin xdp-api-guard -- --iface enp0s3 --block 1.1.1.1
 ```
 
-## 🚧 Roadmap
+## Roadmap
 
 *   [x] Basic XDP Pass/Drop scaffolding
 *   [x] Packet Header Parsing (Eth/IPv4)
@@ -95,10 +95,10 @@ RUST_LOG=info sudo -E cargo run --bin xdp-api-guard -- --iface enp0s3 --block 1.
 *   [ ] Add JSON output for logging events to Splunk/Prometheus
 *   [ ] Load Balancer logic (Layer 4 Round Robin)
 
-## 📚 References
+## References
 *   [Aya Book](https://aya-rs.dev/book/)
 *   [XDP Tutorial](https://github.com/xdp-project/xdp-tutorial)
 *   [Cloudflare L4Drop](https://blog.cloudflare.com/l4drop-xdp-ebpf-based-ddos-mitigations/)
 
-## 📄 License
+## License
 MIT / Apache 2.0
