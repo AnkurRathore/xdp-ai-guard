@@ -6,6 +6,7 @@ use aya_ebpf::{
     bindings::xdp_action,
     macros::{map, xdp},
     maps::HashMap,
+    maps::PerCpuArray,
     programs::XdpContext,
 };
 use aya_log_ebpf::info;
@@ -22,6 +23,12 @@ static BLOCKLIST: HashMap<u32, u32> = HashMap::<u32, u32>::with_max_entries(1024
 #[map]
 static RATE_LIMIT_MAP: HashMap<u32, PacketLog> =
     HashMap::<u32, PacketLog>::with_max_entries(1024, 0);
+
+// Key: Index (0 = DROP, 1 = PASS )
+// Value: u64 (Packet count)
+#[map]
+static STATS: PerCpuArray<u64> = PerCpuArray::with_max_entries(2, 0);
+
 // Threshold:10 packets per sconds
 const LIMIT: u64 = 10;
 const WINDOW_NS: u64 = 1_000_000_000;
@@ -74,6 +81,13 @@ fn try_xdp_api_guard(ctx: XdpContext) -> Result<u32, ()> {
         u32::from_be((*ptr).src_addr)
     };
 
+    // Helper closure to increment stats
+    let inc_stats = |index: u32|{
+        if let Some(ptr) = unsafe { STATS.get_ptr_mut(index)}{
+            unsafe { *ptr +=1}
+        }
+    };
+
     // Extracting the octets to reconstruct the IP
     let oct1 = (ipv4_src >> 24) & 0xFF;
     let oct2 = (ipv4_src >> 16) & 0xFF ;
@@ -83,7 +97,8 @@ fn try_xdp_api_guard(ctx: XdpContext) -> Result<u32, ()> {
     // Blocking Logic
     //Check if source ip exists in the BLOCKING MAP
     if unsafe { BLOCKLIST.get(&ipv4_src) }.is_some() {
-        info!(&ctx, "MANUALLY BLOCKED:{}.{}.{}.{}", oct1, oct2, oct3, oct4);
+        // info!(&ctx, "MANUALLY BLOCKED:{}.{}.{}.{}", oct1, oct2, oct3, oct4);
+        inc_stats(0);
         return Ok(xdp_action::XDP_DROP);
     }
 
@@ -106,10 +121,11 @@ fn try_xdp_api_guard(ctx: XdpContext) -> Result<u32, ()> {
 
             // Apply the limit
             if log.count > LIMIT {
-                info!(
-                    &ctx,
-                    "LIMIT_EXCEEDED: {}.{}.{}.{} (Count: {})", oct1, oct2, oct3, oct4, log.count
-                );
+                // info!(
+                //     &ctx,
+                //     "LIMIT_EXCEEDED: {}.{}.{}.{} (Count: {})", oct1, oct2, oct3, oct4, log.count
+                // );
+                inc_stats(0);
                 return Ok(xdp_action::XDP_DROP);
             }
         }
@@ -123,6 +139,7 @@ fn try_xdp_api_guard(ctx: XdpContext) -> Result<u32, ()> {
         }
     }
 
+    inc_stats(1); // Count PASS
     Ok(xdp_action::XDP_PASS)
 }
 

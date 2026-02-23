@@ -35,6 +35,10 @@ When a flood is detected (e.g., `sudo ping -f`), the XDP program automatically e
 | :--- | :--- |
 | ![Ping Flood](docs/ping_flood.png) | ![Rate Limit Logs](docs/rate_limit_logs.png) |
 
+### 3. Real-Time Telemetry Dashboard
+The user-space agent polls the Kernel `PerCpuArray` map to visualize traffic drops in real-time without locking the XDP data path.
+
+![Dashboard Demo](docs/demo.gif)
 ---
 
 ## Architecture
@@ -46,11 +50,13 @@ This project uses the **Aya** framework to write eBPF logic in safe Rust.
     *   **Layer 1:** Checks Source IP against a `BLOCKLIST` HashMap.
     *   **Layer 2:** Checks packet frequency against a `RATE_LIMIT` HashMap.
     *   Returns `XDP_DROP` or `XDP_PASS`.
+    *   **Lock-Free Statistics:** Uses `PerCpuArray` to track Drop/Pass counts independently on each CPU core, avoiding cache-line bouncing and atomic locking overhead.
 
 2.  **User Space (`xdp-api-guard`):**
     *   Loads the BPF program into the kernel.
     *   Provides a CLI to add IPs to the blocklist.
     *   Reads logs from the kernel via the `aya_log` ring buffer.
+    *   **TUI Dashboard:** Asynchronously polls kernel maps to render a real-time traffic monitor using ANSI escape codes.
 
 ## Prerequisites
 

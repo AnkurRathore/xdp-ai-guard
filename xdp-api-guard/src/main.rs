@@ -2,6 +2,8 @@ use std::net::Ipv4Addr;
 
 use anyhow::Context as _;
 use aya::maps::HashMap;
+use aya::maps::PerCpuArray;
+use aya::util::nr_cpus;
 use aya::programs::{Xdp, XdpFlags};
 use clap::Parser;
 #[rustfmt::skip]
@@ -35,7 +37,7 @@ async fn main() -> anyhow::Result<()> {
         debug!("remove limit on locked memory failed, ret is: {ret}");
     }
 
-    // This will include your eBPF object file as raw bytes at compile-time and load it at
+    // This will include the eBPF object file as raw bytes at compile-time and load it at
     // runtime.
     let mut ebpf = aya::Ebpf::load(aya::include_bytes_aligned!(concat!(
         env!("OUT_DIR"),
@@ -81,11 +83,58 @@ async fn main() -> anyhow::Result<()> {
         .attach(&opt.iface, XdpFlags::default())
         .context("failed to attach the XDP program")?;
 
-    
+    //Get the stats map reference
+    let stats_map: PerCpuArray<_,u64> = PerCpuArray::try_from(ebpf.map("STATS").unwrap())?;
+        
     let ctrl_c = signal::ctrl_c();
     println!("Waiting for Ctrl-C...");
-    ctrl_c.await?;
-    println!("Exiting...");
+    // 2. Run the loop AND the Ctrl-C listener together
+    // Whichever finishes first will stop the other.
+    tokio::select! {
+        _ = signal::ctrl_c() => {
+            println!("Exiting...");
+        }
+        _ = async {
+            let num_cpus = nr_cpus().unwrap();
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                
+                // Read Index 0 (DROPPED)
+                // We use 0 as the index into the map (Key 0)
+                // We use 0 as the flags
+                match stats_map.get(&0, 0) {
+                    Ok(drops) => {
+                        let total_drops: u64 = drops.iter().sum();
+                        
+                        // Read Index 1 (PASSED)
+                        let passes = stats_map.get(&1, 0).unwrap();
+                        let total_passes: u64 = passes.iter().sum();
+
+                        // --- THE UI RENDERING ---
+                
+                // \x1B[2J = Clear Screen
+                // \x1B[1;1H = Move Cursor to Top-Left
+                print!("\x1B[2J\x1B[1;1H");
+
+                println!("╔═══════════════════════════════════════════╗");
+                println!("║             XDP AI GUARD DASHBOARD        ║");
+                println!("╠══════════════════════════╤════════════════╣");
+                println!("║  METRIC                  │  COUNT         ║");
+                println!("╟──────────────────────────┼────────────────╢");
+                println!("║     Dropped Packets      │  {:<13} ║", total_drops);
+                println!("║     Passed Packets       │  {:<13} ║", total_passes);
+                println!("╚══════════════════════════╧════════════════╝");
+                println!("\n (Press Ctrl+C to exit firewall)");
+                        use std::io::Write;
+                        std::io::stdout().flush().unwrap();
+                    }
+                    Err(_) => {
+                        // Map might not be ready yet
+                    }
+                }
+            }
+        } => {}
+    }
 
     Ok(())
 }
