@@ -74,10 +74,16 @@ fn try_xdp_api_guard(ctx: XdpContext) -> Result<u32, ()> {
         u32::from_be((*ptr).src_addr)
     };
 
+    // Extracting the octets to reconstruct the IP
+    let oct1 = (ipv4_src >> 24) & 0xFF;
+    let oct2 = (ipv4_src >> 16) & 0xFF ;
+    let oct3 = (ipv4_src >> 8) & 0xFF;
+    let oct4 = ipv4_src & 0xFF;
+
     // Blocking Logic
     //Check if source ip exists in the BLOCKING MAP
     if unsafe { BLOCKLIST.get(&ipv4_src) }.is_some() {
-        info!(&ctx, "MANUALLY BLOCKED:{:x}", ipv4_src);
+        info!(&ctx, "MANUALLY BLOCKED:{}.{}.{}.{}", oct1, oct2, oct3, oct4);
         return Ok(xdp_action::XDP_DROP);
     }
 
@@ -102,7 +108,7 @@ fn try_xdp_api_guard(ctx: XdpContext) -> Result<u32, ()> {
             if log.count > LIMIT {
                 info!(
                     &ctx,
-                    "LIMIT_EXCEEDED: {:x} (Count: {})", ipv4_src, log.count
+                    "LIMIT_EXCEEDED: {}.{}.{}.{} (Count: {})", oct1, oct2, oct3, oct4, log.count
                 );
                 return Ok(xdp_action::XDP_DROP);
             }
