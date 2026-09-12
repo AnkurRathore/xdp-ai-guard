@@ -5,6 +5,10 @@
 
 #define ETH_P_IP 0x0800
 
+//Stats Keys
+#define STATS_PASS 0
+#define STATS_DROP 1
+
 // Rate limit map
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
@@ -38,7 +42,7 @@ int xdp_guard_func(struct xdp_md *ctx) {
         return XDP_PASS;
 
     // Default: pass traffic
-    __u32 key = 0; // PASS
+    __u32 key = STATS_PASS; // PASS
     __u64 *count = bpf_map_lookup_elem(&stats_map, &key);
     if (count) {
         *count += 1;

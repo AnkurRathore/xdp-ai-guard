@@ -16,7 +16,8 @@ clap = { version = "4", features = ["derive"] }
 anyhow = "1.0"
 log = "0.4"
 env_logger = "0.11"
-
+libc = "0.2"
+ctrlc = "3.4"
 # TUI
 ratatui = "0.29"
 crossterm = "0.28"
