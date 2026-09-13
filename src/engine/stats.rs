@@ -13,6 +13,7 @@ pub struct GuardMetrics {
     last_pass: u64,
     last_drop: u64,
     initialized: bool,
+    max_capacity: usize,
 }
 
 impl GuardMetrics {
@@ -22,12 +23,22 @@ impl GuardMetrics {
             total_drop: 0,
             pass_pps: 0,
             drop_pps: 0,
-            pps_history: VecDeque::from(vec![0; capacity]),
-            drop_pps_history: VecDeque::from(vec![0; capacity]),
+            // Pre-fill only if capacity > 0; otherwise start truly empty
+            pps_history: if capacity > 0 {
+                VecDeque::from(vec![0; capacity])
+            } else {
+                VecDeque::new()
+            },
+            drop_pps_history: if capacity > 0 {
+                VecDeque::from(vec![0; capacity])
+            } else {
+                VecDeque::new()
+            },
             last_sample: Instant::now(),
             last_pass: 0,
             last_drop: 0,
             initialized: false,
+            max_capacity: capacity,
         }
     }
 
@@ -59,10 +70,18 @@ impl GuardMetrics {
             self.pass_pps = (pass_delta as f64 / elapsed) as u64;
             self.drop_pps = (drop_delta as f64 / elapsed) as u64;
 
-            self.pps_history.pop_front();
-            self.pps_history.push_back(self.pass_pps);
-            self.drop_pps_history.pop_front();
-            self.drop_pps_history.push_back(self.drop_pps);
+            // Push and evict safely respecting max_capacity
+            if self.max_capacity > 0 {
+                self.pps_history.push_back(self.pass_pps);
+                if self.pps_history.len() > self.max_capacity {
+                    self.pps_history.pop_front();
+                }
+
+                self.drop_pps_history.push_back(self.drop_pps);
+                if self.drop_pps_history.len() > self.max_capacity {
+                    self.drop_pps_history.pop_front();
+                }
+            }
 
             // update last sample state after calculating deltas
             self.last_pass = total_pass;
