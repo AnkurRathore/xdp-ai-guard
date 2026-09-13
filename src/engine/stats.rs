@@ -12,6 +12,7 @@ pub struct GuardMetrics {
     pub last_sample: Instant,
     last_pass: u64,
     last_drop: u64,
+    initialized: bool,
 }
 
 impl GuardMetrics {
@@ -26,13 +27,27 @@ impl GuardMetrics {
             last_sample: Instant::now(),
             last_pass: 0,
             last_drop: 0,
+            initialized: false,
         }
     }
 
     pub fn update(&mut self, total_pass: u64, total_drop: u64) {
         let now = Instant::now();
-        let elapsed = now.duration_since(self.last_sample).as_secs_f64();
 
+        //Establish baseline on first poll without calculating any fake delta
+        if !self.initialized {
+            self.total_pass = total_pass;
+            self.total_drop = total_drop;
+            self.last_pass = total_pass;
+            self.last_drop = total_drop;
+            self.last_sample = now;
+            self.initialized = true;
+
+            return;
+        }
+
+        let elapsed = now.duration_since(self.last_sample).as_secs_f64();
+        // Minimum interval between updates is 0.25 ms
         if elapsed >= 0.25 {
             let pass_delta = total_pass.saturating_sub(self.last_pass);
             let drop_delta = total_drop.saturating_sub(self.last_drop);
