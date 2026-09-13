@@ -46,8 +46,12 @@ impl GuardMetrics {
             return;
         }
 
+        // unconditionally update live totals on every tick
+        self.total_pass = total_pass;
+        self.total_drop = total_drop;
+
         let elapsed = now.duration_since(self.last_sample).as_secs_f64();
-        // Minimum interval between updates is 0.25 ms
+        // Minimum interval between updates is 0.25 seconds
         if elapsed >= 0.25 {
             let pass_delta = total_pass.saturating_sub(self.last_pass);
             let drop_delta = total_drop.saturating_sub(self.last_drop);
@@ -60,8 +64,7 @@ impl GuardMetrics {
             self.drop_pps_history.pop_front();
             self.drop_pps_history.push_back(self.drop_pps);
 
-            self.total_pass = total_pass;
-            self.total_drop = total_drop;
+            // update last sample state after calculating deltas
             self.last_pass = total_pass;
             self.last_drop = total_drop;
             self.last_sample = now;
