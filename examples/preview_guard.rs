@@ -9,8 +9,6 @@ use crossterm::{
 };
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
-
-// Import from your project modules
 use xdp_ai_guard::engine::stats::GuardMetrics;
 use xdp_ai_guard::ui::theme::Theme;
 use xdp_ai_guard::ui::views::guard_view;
