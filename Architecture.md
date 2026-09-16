@@ -52,8 +52,8 @@ graph TD
 ## 3. Component Details
 
 ### 3.1 Kernel Space (The eBPF Programs)
-Since you are using `libbpf-rs`, your eBPF programs will now be written in **C**.
-*   **Safety:** You will use `bpf_tracing.h` and `bpf_helpers.h`.
+Since we are using `libbpf-rs`, the eBPF programs will now be written in **C**.
+*   **Safety:** we will use `bpf_tracing.h` and `bpf_helpers.h`.
 *   **Offensive Payloads:** Written in C to manually manipulate pointers, testing the verifier's ability to track state.
 *   **CO-RE Integration:** Use `__attribute__((preserve_access_index))` on structs to test how `libbpf` handles relocations across different kernel versions.
 
@@ -91,29 +91,13 @@ The workflow changes from Aya’s `cargo xtask` to:
 
 ## 5. UI Architecture (Ratatui)
 
-The TUI will act as a "Control Center" for your research.
+The TUI will act as a "Control Center" for the research.
 
 *   **View 1: Real-time Guard:** Shows XDP packet drop/allow stats.
 *   **View 2: Verifier Lab:** A scrollable window showing the live output of the kernel verifier as you attempt to inject offensive payloads.
 *   **View 3: Benchmark:** A histogram of syscall latencies.
 
 ---
-
-## 6. Directory Structure (Proposed)
-
-```text
-xdp-ai-guard/
-├── src/
-│   ├── main.rs          # Ratatui UI & App Logic
-│   ├── bpf/             # C Code for eBPF
-│   │   ├── guard.bpf.c  # Production XDP code
-│   │   ├── stress.bpf.c # Offensive research code
-│   │   └── headers/     # VMLinux.h and helpers
-│   └── research/        # Rust modules for benchmarking
-├── build.rs             # Triggers libbpf-cargo skeleton gen
-├── Cargo.toml           # Dependencies: libbpf-rs, ratatui, tokio
-└── Makefile             # Optional: For complex clang invocations
-```
 
 ## 7. Key Differences from Aya
 | Feature | Aya | libbpf-rs |
