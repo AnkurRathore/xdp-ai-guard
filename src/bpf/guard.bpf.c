@@ -25,6 +25,14 @@ struct {
     __type(value, __u64);
 } stats_map SEC(".maps");
 
+// Counter to simulate security state check in tracepoint
+struct {
+    __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+    __uint(max_entries, 1);
+    __type(key, __u32);
+    __type(value, __u64);
+} bench_map SEC(".maps");
+
 SEC("xdp")
 int xdp_guard_func(struct xdp_md *ctx) {
     void *data_end = (void *)(long)ctx->data_end;
@@ -49,6 +57,17 @@ int xdp_guard_func(struct xdp_md *ctx) {
     }
 
     return XDP_PASS;
+}
+
+// Syscall micro-benchmark probe: attaches to sys_enter_getpid
+SEC("tracepoint/syscalls/sys_enter_getpid")
+int bench_sys_enter_getpid(void *ctx) {
+    __u32 key = 0;
+    __u64 *val = bpf_map_lookup_elem(&bench_map, &key);
+    if (val) {
+        *val += 1;
+    }
+    return 0;
 }
 
 char LICENSE[] SEC("license") = "Dual MIT/GPL";
