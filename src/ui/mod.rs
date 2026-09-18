@@ -1,3 +1,3 @@
-// pub mod app;
+pub mod app;
 pub mod theme;
 pub mod views;
