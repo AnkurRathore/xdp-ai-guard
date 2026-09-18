@@ -5,7 +5,7 @@
 [![Interface](https://img.shields.io/badge/TUI-Ratatui-green)](https://github.com/ratatui/ratatui)
 [![License](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-lightgrey)](LICENSE)
 
-**xdp-ai-guard** is a high-speed, kernel-level packet filter and security research engine designed to protect AI Inference endpoints (e.g., vLLM, Ollama, Triton) against volumetric DDoS attacks, reconnaissance sweeps, and state-exhaustion exploits. 
+**xdp-ai-guard** is an eBPF security research harness and telemetry dashboard built with C, libbpf-rs, and Ratatui to empirically measure kernel verifier boundaries, CO-RE failure modes, and syscall tracing overhead.
 
 Built with **C (eBPF)**, **libbpf-rs**, and **Rust 2024**, the project combines high-throughput packet processing with an interactive **Ratatui** terminal interface and an empirical research harness measuring eBPF verifier pushback and syscall monitoring overhead.
 
