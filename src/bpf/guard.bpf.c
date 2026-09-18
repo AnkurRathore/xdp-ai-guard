@@ -4,34 +4,26 @@
 #include "guard.h"
 
 #define ETH_P_IP 0x0800
+#define IPPROTO_ICMP 1
+#define IPPROTO_UDP  17
+#define IPPROTO_TCP  6
 
-//Stats Keys
-#define STATS_PASS 0
-#define STATS_DROP 1
+#define STAT_PASS 0
+#define STAT_DROP 1
 
-// Rate limit map
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 10000);
-    __type(key, __u32);                 // IPv4 source address
-    __type(value, struct rate_limit_entry);
-} rate_limit_map SEC(".maps");
-
-// Per-CPU drop/pass counters (lock-free)
 struct {
     __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
-    __uint(max_entries, 2);             // 0 = PASS, 1 = DROP
+    __uint(max_entries, 2);
     __type(key, __u32);
     __type(value, __u64);
 } stats_map SEC(".maps");
 
-// Counter to simulate security state check in tracepoint
-struct {
-    __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
-    __uint(max_entries, 1);
-    __type(key, __u32);
-    __type(value, __u64);
-} bench_map SEC(".maps");
+static __always_inline void record_stat(__u32 key) {
+    __u64 *count = bpf_map_lookup_elem(&stats_map, &key);
+    if (count) {
+        *count += 1;
+    }
+}
 
 SEC("xdp")
 int xdp_guard_func(struct xdp_md *ctx) {
@@ -49,25 +41,23 @@ int xdp_guard_func(struct xdp_md *ctx) {
     if ((void *)(iph + 1) > data_end)
         return XDP_PASS;
 
-    // Default: pass traffic
-    __u32 key = STATS_PASS; // PASS
-    __u64 *count = bpf_map_lookup_elem(&stats_map, &key);
-    if (count) {
-        *count += 1;
+    // === GUARD SECURITY POLICIES ===
+
+    // Rule 1: Drop ICMP (Ping Flood / Reconnaissance Sweep)
+    if (iph->protocol == IPPROTO_ICMP) {
+        record_stat(STAT_DROP);
+        return XDP_DROP; // Drop packet directly in the NIC/driver!
     }
 
+    // Rule 2: Drop unsolicited UDP (Common DDoS Amplification vector against AI servers)
+    if (iph->protocol == IPPROTO_UDP) {
+        record_stat(STAT_DROP);
+        return XDP_DROP;
+    }
+
+    // Default: Allow standard TCP (AI inference requests)
+    record_stat(STAT_PASS);
     return XDP_PASS;
-}
-
-// Syscall micro-benchmark probe: attaches to sys_enter_getpid
-SEC("tracepoint/syscalls/sys_enter_getpid")
-int bench_sys_enter_getpid(void *ctx) {
-    __u32 key = 0;
-    __u64 *val = bpf_map_lookup_elem(&bench_map, &key);
-    if (val) {
-        *val += 1;
-    }
-    return 0;
 }
 
 char LICENSE[] SEC("license") = "Dual MIT/GPL";
