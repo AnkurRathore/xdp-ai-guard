@@ -1,42 +1,30 @@
-[workspace]
-resolver = "2"
-members = [
-    "xdp-api-guard",
-    "xdp-api-guard-common",
-    "xdp-api-guard-ebpf",
-]
-default-members = ["xdp-api-guard", "xdp-api-guard-common"]
-
-[workspace.package]
-license = "MIT OR Apache-2.0"
+[package]
+name = "xdp-ai-guard"
+version = "0.2.0"
 edition = "2024"
-authors = ["Ankur Rathore <rathore.ankur@gmail.com>"]
-description = "A high-performance XDP firewall and rate limiter using eBPF"
-repository = "https://github.com/AnkurRathore/xdp-ai-guard"
-keywords = ["ebpf", "xdp", "rust", "linux", "networking"]
-categories = ["network-programming", "command-line-utilities"]
+authors = ["Ankur Rathore"]
+license = "MIT OR Apache-2.0"
+description = "High-performance AI Inference Guard & eBPF Research Harness"
 
-[workspace.dependencies]
-aya = { git = "https://github.com/aya-rs/aya", default-features = false }
-aya-build = { git = "https://github.com/aya-rs/aya", default-features = false }
-aya-ebpf = { git = "https://github.com/aya-rs/aya", default-features = false }
-aya-log = { git = "https://github.com/aya-rs/aya", default-features = false }
-aya-log-ebpf = { git = "https://github.com/aya-rs/aya", default-features = false }
+[dependencies]
+# libbpf runtime
+libbpf-rs = "0.24"
 
-anyhow = { version = "1", default-features = false }
-cargo_metadata = { version = "0.23.0", default-features = false }
-# `std` feature is currently required to build `clap`.
-#
-# See https://github.com/clap-rs/clap/blob/61f5ee5/clap_builder/src/lib.rs#L15.
-clap = { version = "4.5.20", default-features = false, features = ["std"] }
-env_logger = { version = "0.11.5", default-features = false }
-libc = { version = "0.2.159", default-features = false }
-log = { version = "0.4.22", default-features = false }
-tokio = { version = "1.40.0", default-features = true }
-which = { version = "6.0.0", default-features = false }
+# Async & CLI
+tokio = { version = "1", features = ["full"] }
+clap = { version = "4", features = ["derive"] }
+anyhow = "1.0"
+log = "0.4"
+env_logger = "0.11"
+libc = "0.2"
+ctrlc = "3.4"
+# TUI
+ratatui = "0.29"
+crossterm = "0.28"
 
+[build-dependencies]
+libbpf-cargo = "0.24"
 
-
-[profile.release.package.xdp-api-guard-ebpf]
-debug = 2
-codegen-units = 1
+[profile.release]
+opt-level = 3
+lto = true

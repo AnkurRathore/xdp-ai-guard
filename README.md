@@ -1,110 +1,121 @@
-# 🛡️ xdp-ai-guard
+# xdp-ai-guard
 
-**A high-performance Denial-of-Service (DoS) filter for AI Inference servers, written in Rust using eBPF/XDP.**
+[![Rust](https://img.shields.io/badge/Rust-2024%20Edition-orange?logo=rust)](https://www.rust-lang.org)
+[![eBPF](https://img.shields.io/badge/eBPF-XDP%20%2F%20libbpf--rs-blue?logo=linux)](https://github.com/libbpf/libbpf-rs)
+[![Interface](https://img.shields.io/badge/TUI-Ratatui-green)](https://github.com/ratatui/ratatui)
+[![License](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-lightgrey)](LICENSE)
 
-![Status](https://img.shields.io/badge/status-active_development-orange)
-![License](https://img.shields.io/badge/license-MIT-blue)
-![Rust](https://img.shields.io/badge/rust-nightly-red)
+**xdp-ai-guard** is a high-speed, kernel-level packet filter and security research engine designed to protect AI Inference endpoints (e.g., vLLM, Ollama, Triton) against volumetric DDoS attacks, reconnaissance sweeps, and state-exhaustion exploits. 
 
-## The Problem: GPU Cycles are Expensive
-Running Large Language Models (like Llama-3-70B) is computationally expensive.
-Standard firewalls (Nginx, Iptables) drop malicious packets **after** the OS has already allocated memory (`sk_buff`) and performed context switches.
+Built with **C (eBPF)**, **libbpf-rs**, and **Rust 2024**, the project combines high-throughput packet processing with an interactive **Ratatui** terminal interface and an empirical research harness measuring eBPF verifier pushback and syscall monitoring overhead.
 
-If an inference server receives a flood of spam/DDoS traffic, the CPU wastes cycles processing network interrupts instead of feeding data to the GPU.
-
-## The Solution: XDP (eXpress Data Path)
-**xdp-ai-guard** runs an eBPF program directly in the Network Interface Card (NIC) driver. It inspects and drops malicious packets **before** the Linux Kernel even sees them.
-
-*   **Zero Allocation:** Drops packets without allocating an `sk_buff`.
-*   **Line Rate:** Capable of filtering millions of packets per second.
-*   **Dual-Layer Defense:** Combines a static blocklist with dynamic volumetric rate limiting.
-
-## Demo & Evidence
-
-### 1. Manual Blocking (Static Blocklist)
-The user space agent populates a Kernel Map with known bad IPs (e.g., `1.1.1.1`). The XDP program drops them instantly.
-
-| Kernel Logs (Blocking `1.1.1.1`) | Victim Terminal (100% Packet Loss) |
-| :--- | :--- |
-| ![Manual Logs](docs/manual_block_logs.png) | ![Ping Fail](docs/ping_fail.png) |
-
-### 2. Volumetric Rate Limiting (DDoS Protection)
-When a flood is detected (e.g., `sudo ping -f`), the XDP program automatically engages a Token Bucket limiter to drop excess traffic from that specific IP.
-
-| Attacker (Ping Flood) | Kernel Logs (Rate Limit Triggered) |
-| :--- | :--- |
-| ![Ping Flood](docs/ping_flood.png) | ![Rate Limit Logs](docs/rate_limit_logs.png) |
-
-### 3. Real-Time Telemetry Dashboard
-The user-space agent polls the Kernel `PerCpuArray` map to visualize traffic drops in real-time without locking the XDP data path.
-
-![Dashboard Demo](docs/demo.gif)
 ---
 
-## Architecture
+## Visual Showcase
 
-This project uses the **Aya** framework to write eBPF logic in safe Rust.
+### 1. Live Ingress Guard & Packet Drop Engine
+Intercepting and dropping volumetric sweeps (ICMP floods / UDP amplification) directly at the network driver layer before traversing the Linux network stack:
 
-1.  **Kernel Space (`xdp-api-guard-ebpf`):**
-    *   Runs inside the kernel VM attached to the NIC.
-    *   **Layer 1:** Checks Source IP against a `BLOCKLIST` HashMap.
-    *   **Layer 2:** Checks packet frequency against a `RATE_LIMIT` HashMap.
-    *   Returns `XDP_DROP` or `XDP_PASS`.
-    *   **Lock-Free Statistics:** Uses `PerCpuArray` to track Drop/Pass counts independently on each CPU core, avoiding cache-line bouncing and atomic locking overhead.
+![Live Guard Dashboard](docs/assets/guard_dashboard.png)
+*Real-time ingress intensity sparkline (pkts/sec), per-CPU lock-free counters, and live pass/drop ratio gauge.*
 
-2.  **User Space (`xdp-api-guard`):**
-    *   Loads the BPF program into the kernel.
-    *   Provides a CLI to add IPs to the blocklist.
-    *   Reads logs from the kernel via the `aya_log` ring buffer.
-    *   **TUI Dashboard:** Asynchronously polls kernel maps to render a real-time traffic monitor using ANSI escape codes.
+![Packet Drop Verification](docs/assets/packet_drops.png)
+*Dropping 2,700+ adversarial sweep packets with sub-microsecond latency and zero userspace allocation.*
+
+---
+
+### 2. eBPF Verifier Pushback Lab
+An interactive research harness executing offensive and state-manipulating eBPF bytecode patterns against the Linux kernel verifier to document rejection boundaries and complexity limits:
+
+![Verifier Pushback Lab](docs/assets/verifier_lab.png)
+*Live execution of edge cases: Unbounded dynamic loops, missing packet boundary checks, stack frame spill limits, and restricted helper contexts.*
+
+---
+
+### 3. Dynamic Syscall Overhead & CO-RE Inspector
+Empirical hardware micro-benchmarking measuring the nanosecond-level instrumentation tax of eBPF monitoring hooks against evasion attempts:
+
+![Syscall Benchmark & CO-RE](docs/assets/benchmark_core.png)
+*Live A/B latency benchmarking (unmonitored baseline vs. active eBPF probe) and CO-RE (Compile Once – Run Everywhere) structure relocation tracking.*
+
+---
+
+## Key Features
+
+* **Kernel-Space Driver Offload (XDP):** Filters ingress packets at the earliest possible point in the kernel network stack, mitigating volumetric attacks before socket allocation.
+* **Pure C + libbpf-rs Architecture:** Fully migrated from Aya to official Linux `libbpf` skeleton generation (`libbpf-cargo`) for maximum compatibility with kernel BTF.
+* **Lock-Free Telemetry:** Uses `BPF_MAP_TYPE_PERCPU_ARRAY` to record millions of events per second across all CPU cores without lock contention.
+* **Empirical Verifier Research:** Programmatically loads malformed BPF programs, capturing and parsing raw `bpf_verifier` diagnostics to document kernel safety enforcement.
+* **Live Hardware Benchmarking:** Dynamically measures single-syscall nanosecond overhead on the host CPU using high-precision timers and cache-warming routines.
+* **Responsive Ratatui TUI:** Full terminal dashboard supporting multi-tab navigation, sparklines, gauges, and a simulation mock mode (`--mock`).
+
+---
 
 ## Prerequisites
 
-You need a Linux environment with a modern kernel (5.10+ recommended).
+* **Linux Kernel:** `>= 5.8` with `CONFIG_DEBUG_INFO_BTF=y`
+* **Rust Toolchain:** `>= 1.85.0` (Rust 2024 edition)
+* **Clang & LLVM:** `>= 11.0`
+* **System Libraries:**
+  ```bash
+  # Ubuntu / Debian
+  sudo apt install -y clang llvm libelf-dev zlib1g-dev linux-tools-common linux-tools-generic linux-tools-$(uname -r)
+  ```
 
-1.  **Rust Nightly:** Required for compiling BPF bytecode.
-    ```bash
-    rustup toolchain install nightly --component rust-src
-    ```
-2.  **BPF Linker:**
-    ```bash
-    cargo install bpf-linker
-    ```
-3.  **Dependencies:** `llvm`, `clang`, `libssl-dev`.
+---
 
-## Usage
+## Quick Start
 
-### 1. Build
+### 1. Clone & Build
 ```bash
-cargo build
+git clone https://github.com/AnkurRathore/xdp-ai-guard.git
+cd xdp-ai-guard
+cargo build --release
 ```
 
-### 2. Run (Default Mode)
-Monitors traffic and applies the Rate Limiter (10 packets/sec threshold).
+### 2. Run with Live Kernel Guard
+Attach the XDP filter to your desired network interface (e.g., `lo`, `eth0`, `wlan0`):
 ```bash
-RUST_LOG=info sudo -E cargo run --bin xdp-api-guard -- --iface enp0s3
+sudo ./target/release/xdp-ai-guard -i lo
 ```
 
-### 3. Run (Manual Block Mode)
-Blocks a specific IP immediately upon startup.
+### 3. Run in Mock / Preview Mode (No Root Required)
+To inspect the UI and test the verifier/benchmark modules without loading kernel programs:
 ```bash
-# Example: Block Cloudflare DNS
-RUST_LOG=info sudo -E cargo run --bin xdp-api-guard -- --iface enp0s3 --block 1.1.1.1
+cargo run -- --mock
 ```
 
-## Roadmap
+---
 
-*   [x] Basic XDP Pass/Drop scaffolding
-*   [x] Packet Header Parsing (Eth/IPv4)
-*   [x] Static Blocklist via eBPF Maps
-*   [x] Dynamic Rate Limiting (Token Bucket)
-*   [ ] Add JSON output for logging events to Splunk/Prometheus
-*   [ ] Load Balancer logic (Layer 4 Round Robin)
+## Testing the Guard
 
-## References
-*   [Aya Book](https://aya-rs.dev/book/)
-*   [XDP Tutorial](https://github.com/xdp-project/xdp-tutorial)
-*   [Cloudflare L4Drop](https://blog.cloudflare.com/l4drop-xdp-ebpf-based-ddos-mitigations/)
+In a secondary terminal, verify the packet filtering policies:
+
+```bash
+# 1. Trigger Dropped Packets (ICMP Ping Sweep Blocked)
+ping -c 5 127.0.0.1
+sudo ping -f -c 3000 127.0.0.1
+
+# 2. Trigger Allowed Packets (Legitimate TCP Inference Traffic)
+curl http://127.0.0.1:8000
+nc -zv 127.0.0.1 22
+```
+
+---
+
+## TUI Keyboard Controls
+
+| Key | Action |
+| :--- | :--- |
+| `Tab` / `1-3` | Switch between Dashboard, Verifier Lab, and Benchmark tabs |
+| `↑` / `↓` (`k` / `j`) | Navigate offensive test patterns in Verifier Lab |
+| `R` | Execute live kernel verifier audit on selected test |
+| `B` | Re-run hardware syscall micro-benchmark |
+| `Q` / `Ctrl+C` | Cleanly detach XDP program and exit |
+
+---
 
 ## License
-MIT / Apache 2.0
+Dual-licensed under either of:
+* MIT License ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+* Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
